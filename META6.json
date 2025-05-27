@@ -1,0 +1,25 @@
+{
+  "auth": "zef:FCO",
+  "authors": [
+    "Fernando Corrêa de Oliveira"
+  ],
+  "build-depends": [
+  ],
+  "depends": [
+  ],
+  "description": "a toy project to study, investigate, and try to play with dependency injection.",
+  "license": "Artistic-2.0",
+  "name": "Deps",
+  "perl": "6.d",
+  "provides": {
+    "Deps": "lib/Deps.rakumod"
+  },
+  "resources": [
+  ],
+  "source-url": "https://github.com/FCO/Deps.git",
+  "tags": [
+  ],
+  "test-depends": [
+  ],
+  "version": "0.0.1"
+}
