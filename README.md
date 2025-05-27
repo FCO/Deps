@@ -114,6 +114,27 @@ sub handle-request(UInt $user-id) is injected {
 is await(handle-request(21)), 42;
 ```
 
+Instantiate injecting data
+--------------------------
+
+```raku
+use Test;
+use Deps;
+
+class Example {
+	has Int $.user-id;
+	has Int $.int;
+	has Str $.str;
+}
+
+deps {
+   injectable 13;
+   injectable 42, :name<user-id>;
+
+   is-deeply instantiate(Example, :str<bla>), Example.new(user-id => 42, int => 13, str => "bla");
+}
+```
+
 DESCRIPTION
 ===========
 

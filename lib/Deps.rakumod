@@ -3,11 +3,13 @@ unit class Deps;
 sub injected(Mu $var is rw, |c) is export { $var = $*DEPS.get($var, :name($var.VAR.name.substr: 1)) // $*DEPS.get: $var }
 sub injectable(|c) is export { $*DEPS.register: |c }
 sub import-deps($new-parent) is export { $*DEPS.import: $new-parent }
+sub instantiate(|c) is export { $*DEPS.instantiate: |c }
 sub deps(&block, ::?CLASS $deps = $*DEPS.defined ?? $*DEPS.push-layer !! ::?CLASS.new) is export {
 	{
 		my $*DEPS = $deps;
 		block
 	}
+	# TODO: finalize
 	$deps
 }
 
@@ -45,6 +47,11 @@ multi prepare-args(Any:U ::Type, ::?CLASS $deps --> Map()) {
 		my $value = $deps.get($type, :$name) // $deps.get: $type;
 		$name => $_ with $value
 	}
+}
+
+method instantiate(::Type, |c) {
+	my %data = prepare-args Type, self;
+	Type.new: |%data, |c
 }
 
 multi prepare-args(&func, ::?CLASS $deps --> Capture()) {
@@ -269,6 +276,28 @@ sub handle-request(UInt $user-id) is injected {
 }
 
 is await(handle-request(21)), 42;
+
+=end code
+
+=head2 Instantiate injecting data
+
+=begin code :lang<raku>
+
+use Test;
+use Deps;
+
+class Example {
+	has Int $.user-id;
+	has Int $.int;
+	has Str $.str;
+}
+
+deps {
+   injectable 13;
+   injectable 42, :name<user-id>;
+
+   is-deeply instantiate(Example, :str<bla>), Example.new(user-id => 42, int => 13, str => "bla");
+}
 
 =end code
 

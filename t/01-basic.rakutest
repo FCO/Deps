@@ -13,6 +13,11 @@ class Bla {
    has Int $.a;
    has Int $.b
 }
+class Example {
+	has Int $.user-id;
+	has Int $.int;
+	has Str $.str;
+}
 
 my $old-deps = deps { injectable C, :name<class> }
 deps {
@@ -21,7 +26,7 @@ deps {
    injected my C $obj;
    is-deeply $obj, C.new: :13attr;
 
-   say injected my C $class;
+   injected my C $class;
    is-deeply $class, C.new;
 }
 
@@ -83,5 +88,12 @@ sub handle-request(UInt $user-id) is injected {
 }
 
 is await(handle-request(21)), 42;
+
+deps {
+   injectable 13;
+   injectable 42, :name<user-id>;
+
+   is-deeply instantiate(Example, :str<bla>), Example.new(user-id => 42, int => 13, str => "bla");
+}
 
 done-testing;
