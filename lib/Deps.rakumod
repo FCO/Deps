@@ -1,43 +1,121 @@
+use Deps::LifeCycle;
+use Deps::Item;
+use Deps::Item::New;
+use Deps::Item::Store;
+use Deps::Item::Scope;
+use Deps::Module;
 unit class Deps;
 
-sub injected(Mu $var is rw, |c) is export { $var = $*DEPS.get($var, :name($var.VAR.name.substr: 1)) // $*DEPS.get: $var }
-sub injectable(|c) is export { $*DEPS.register: |c }
-sub import-deps($new-parent) is export { $*DEPS.import: $new-parent }
-sub instantiate(|c) is export { $*DEPS.instantiate: |c }
-sub deps(&block, ::?CLASS $deps = $*DEPS.defined ?? $*DEPS.push-layer !! ::?CLASS.new) is export {
-	{
-		my $*DEPS = $deps;
-		block
+multi set-deps($deps is rw, $DEPS) {
+	$deps = $DEPS if not $deps.defined;
+}
+multi set-deps($, $) {}
+
+sub get-deps($deps) is export {
+	return $deps if $deps ~~ ::?CLASS;
+	with $deps {
+		die "It should be a Str od a Deps object" unless $deps ~~ Str;
+		return .{$deps} with %*DEPS;
+		die "Scope $deps not found"
 	}
-	# TODO: finalize
-	$deps
+	$*DEPS
+}
+
+multi injected(Mu $var is rw, :$deps, |c) is export {
+	my $deps-obj = get-deps($deps);
+	$var = $deps-obj.get($var, |(:$deps with $deps), :name($var.VAR.name.substr: 1)) // $deps-obj.get: $var
+}
+multi injected(Mu $var, :$deps, |c) is export {
+	my $deps-obj = get-deps($deps);
+	$deps-obj.get($var, :deps($var.VAR.name.substr: 1)) // $deps-obj.get: $var
+}
+sub injectable(:$deps, |c) is export { get-deps($deps).register: |c }
+sub instantiate(:$deps, |c) is export { get-deps($deps).instantiate: |c }
+
+sub import-deps($new-parent, :$deps) is export {
+	get-deps($deps).import: $new-parent
+}
+
+sub deps-base($deps-obj, &block, :$deps is raw) {
+	my %named-deps = |$_ with %*DEPS;
+	{
+		my %*DEPS = %named-deps;
+		my $*DEPS = $deps-obj;
+		set-deps $deps, $deps-obj;
+		%*DEPS{$_} = $deps-obj with $deps;
+		block |($deps-obj if &block.arity);
+		$deps-obj
+	}
+}
+
+multi deps-root( &block, :$deps is raw, |c ) is export {
+	my $deps-obj = ::?CLASS.new;
+	deps-base $deps-obj, &block, :$deps, |c
+}
+
+sub deps-scope(
+	&block,
+	:$deps is raw,
+	::?CLASS :$parent = ($*DEPS // die "deps-scope must be used inside a scope"),
+	|c
+) is export {
+	my $deps-obj = $parent.push-layer;
+	deps-base $deps-obj, &block, :$deps, |c
+}
+sub deps(|c) is export {
+	do if $*DEPS {
+		deps-scope |c
+	} else {
+		deps-root |c
+	}
 }
 
 has ::?CLASS $.parent;
 has %.factories;
+has %.cache;
+has %.named-cache;
 
 method TWEAK(|) {
 	$.register: self;
 	$.register: self, :name<deps>;
 }
 
-method import(::?CLASS:D $new-parent) {
+multi method import(::?CLASS:D $new-parent) {
 	return $!parent = $new-parent without $!parent;
 	$!parent.import: $new-parent
-
 }
 
-method store(::Type, %hash (:$name, :&func)) {
+multi method lifecycle-map(Store) { Deps::Item::Store }
+multi method lifecycle-map(New)   { Deps::Item::New   }
+multi method lifecycle-map(Scope) { Deps::Item::Scope }
+
+method new-item(Mu:U :$orig-type, Str() :$name, :&func, Mu :$value, Deps::LifeCycle :$lifecycle) {
+	$.lifecycle-map($lifecycle).new:
+		:$orig-type,
+		:$value,
+		|(:$name with $name),
+		|(:&func with &func),
+		:scope(self)
+	;
+}
+
+method store(::Type, $item) {
 	for Type.^mro.kv -> UInt $i, ::Type {
-		%!factories{Type.^name}[$i].push: %hash;
+		last if Type.^name eq Any.^name;
+		if $item.has-name && %!named-cache{Type.^name} {
+			my \deleted = %!named-cache{Type.^name}:delete;
+		}
+		%!cache{Type.^name}:delete;
+		%!factories{Type.^name}[$i].push: $item;
 		for 0 .. $i -> $j {
 			$_ = [] without %!factories{Type.^name}[$j];
 		}
 	}
 	for Type.^roles -> ::Type {
-		%!factories{Type.^name}[1].push: %hash;
+		%!factories{Type.^name}[1].push: $item;
 		$_ = [] without %!factories{Type.^name}[0];
 	}
+	$item.value
 }
 
 multi prepare-args(Any:U ::Type, ::?CLASS $deps --> Map()) {
@@ -54,8 +132,38 @@ method instantiate(::Type, |c) {
 	Type.new: |%data, |c
 }
 
+multi trait_mod:<is>(Parameter $p, :$injected) is export {
+	my $f = $p.^attributes.first: *.name eq q"$!flags";
+	my $flags = $f.get_value: $p;
+	$flags +|= nqp::const::SIG_ELEM_IS_OPTIONAL;
+	$f.set_value: $p, $flags;
+	role Injected { method is-injected { True } }
+
+	$p does Injected
+}
+
+multi trait_mod:<is>(Sub $func, :$injected) is export {
+	without $func.signature.params.first: *.?is-injected {
+		trait_mod:<is> $_, :injected for $func.signature.params;
+		$func does role { method should-not-valudate-injected-params { True } }
+	}
+	$func.wrap: sub (:$deps? = $*DEPS.defined ?? $*DEPS.push-layer !! Deps.new, |c) {
+		my &orig = nextcallee;
+		{
+			my $data = prepare-args &orig, $deps;
+			my $*DEPS = $deps;
+			orig |$data, |c
+		}
+	}
+}
+
+
 multi prepare-args(&func, ::?CLASS $deps --> Capture()) {
-	do for &func.signature.params -> Parameter $par {
+	my @params = &func.signature.params;
+	my @injected = @params.grep: *.?is-injected;
+	@injected = @params unless @injected;
+
+	my Capture() $c = do for @injected -> Parameter $par {
 		my $type = $par.type;
 		do if $par.named {
 			my @names = $par.named_names;
@@ -68,58 +176,60 @@ multi prepare-args(&func, ::?CLASS $deps --> Capture()) {
 			$_ with $value
 		}
 	}
-}
 
-multi trait_mod:<is>(Sub $func, :$injected) is export {
-	$func.wrap: sub (:$deps? = $*DEPS.defined ?? $*DEPS.push-layer !! Deps.new, |c) {
-		{
-			my $data = prepare-args $func, $deps;
-			my $*DEPS = $deps;
-			nextwith |$data, |c
+	unless &func.?should-not-valudate-injected-params {
+		for @injected -> $p {
+			if $p.named {
+				die "{ $p.name } was not provided by Deps" without $c.hash{$p.named_names.tail}
+			} else {
+				die "{ $p.name } was not provided by Deps" if $c.list < @injected.grep: !*.named
+			}
 		}
 	}
+
+	$c
 }
 
-multi method register(&function, :$lifecycle where { !.defined || $_ eq "stored" }, :$name) {
-	my %hash = func => -> |c {
-		my Capture $c = prepare-args &function, self;
-		$ //= function |$c, |c
-	}, |(:$name with $name);
-	$.store: &function.returns, %hash;
+multi method register(
+	&function,
+	Str() :$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
+	:$name,
+	Capture :$capture
+) {
+	my $orig-type = &function.returns;
+	my Deps::Item $item = $.new-item:
+		:$orig-type,
+		func => -> |c {
+			my Capture $c = prepare-args &function, self;
+			function |$c, |($_ with $capture)
+		},
+		|(:$name with $name),
+		:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
+	;
+	$.store: $orig-type, $item;
 }
 
-multi method register(&function, :$lifecycle where { $_ eq "new" }, :$name) {
-	my %hash = func => -> |c {
-		say "new";
-		my Capture $c = prepare-args &function, self;
-		function |$c, |c
-	}, |(:$name with $name);
-	$.store: &function.returns, %hash;
+multi method register(Any:D $value, :$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store", :$name) {
+	my Deps::Item $item = $.new-item:
+		:orig-type($value.WHAT),
+		:$value,
+		|(:$name with $name),
+		:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
+	;
+	$.store: $value, $item
 }
 
-multi method register(Any:D $obj, :$lifecycle where { !.defined || $_ eq "stored" }, :$name) {
-	my %hash = func => -> | { $obj }, |(:$name with $name);
-	$.store: $obj, %hash
-}
-
-multi method register(Any:U ::Type, :$lifecycle where { !.defined || $_ eq "stored" }, :$name) {
-	my Type $obj;
-	my %hash = func => -> |c {
-		$ //= Type.new: |prepare-args(Type, self), |c
-	}, |(:$name with $name);
-	$.store: Type, %hash
-}
-
-multi method register(Any:U ::Type, :$lifecycle where { $_ eq "new" }, :$name) {
-	my %hash = func => -> |c {
-		Type.new: |prepare-args(Type, self), |c
-	}, |(:$name with $name);
-	$.store: Type, %hash
-}
-
-multi method register(Any:D $obj, :$lifecycle where { $_ eq "new" }) {
-	my %hash = func => -> |c { $obj.WHAT.new: |c };
-	$.store: $obj, %hash
+multi method register(Any:U ::Type, :$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store", :$name, Capture :$capture) {
+	my Deps::Item $item = $.new-item:
+		:orig-type(Type),
+		func => -> |c {
+			my %args = prepare-args(Type, self);
+			Type.new: |%args, :$capture
+		},
+		|(:$name with $name),
+		:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
+	;
+	$.store: Type, $item
 }
 
 method chain(Mu ::Type) {
@@ -147,19 +257,22 @@ method push-layer {
 
 method pop-layer { $!parent }
 
-multi method get(Mu ::Type, Str :$name!, |c) {
+multi method get(::Type, Str :$name!, Capture :$capture) {
+	return .get-value: self, :$capture with %!named-cache{Type.^name}{$name};
 	for |$.factory-to: Type {
-		next unless $_ ~~ Associative && (.<func>:exists);
-		next unless (.<name>:exists) && .<name> eq $name;
-		return .<func>(|c) # TODO: It needs to receive parameters
+		next unless .has-name: $name;
+		%!named-cache{Type.^name}{$name} = $_;
+		return .get-value: self, :$capture
 	}
 }
 
-multi method get(Mu ::Type, |c) {
+multi method get(::Type, Capture :$capture) {
+	return .get-value: self, :$capture with %!cache{Type.^name};
 	for |$.factory-to: Type {
-		next unless $_ ~~ Associative && (.<func>:exists);
-		return .<func>(|c) # TODO: It needs to receive parameters
+		%!cache{Type.^name} = $_;
+		return .get-value: self, :$capture
 	}
+	try $.instantiate(Type) // Nil
 }
 
 =begin pod
@@ -218,7 +331,7 @@ deps {
    injected my C $obj;
    is-deeply $obj, C.new: :13attr;
 
-   say injected my C $class;
+   injected my C $class;
    is-deeply $class, C.new;
 }
 

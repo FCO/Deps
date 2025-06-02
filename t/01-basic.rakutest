@@ -1,5 +1,24 @@
 use Test;
 use Deps;
+use lib "t/lib";
+use Mod1;
+use Mod2;
+
+my $root = deps-root {
+	ok not $*DEPS.parent;
+	my $parent = $*DEPS;
+	deps-scope {
+		ok $*DEPS.parent === $parent
+	}
+}
+
+throws-like {
+	deps-scope {;}
+}, Exception, message => /scope/;
+
+deps-scope :parent($root), {
+	ok $*DEPS.parent === $root
+}
 
 class C         { has Int $.attr = 42                }
 class C1        { has $.attr                         }
@@ -9,7 +28,7 @@ class C3 does R {                                    }
 class C4 is C   { has C1 $.a; has C2 $.b; has C3 $.c }
 class C5 is C4  {                                    }
 class Bla {
-   has $.value;
+   has Str $.value;
    has Int $.a;
    has Int $.b
 }
@@ -38,6 +57,7 @@ given Deps.new {
    .register: C5;
 
    is-deeply .get(C1), C1.new(attr => "value1");
+   is-deeply .get(C1), .get(C1);
    is-deeply .get(R) , C2.new(int => 42, a => C1.new(attr => "value1"));
    is-deeply .get(C2), C2.new(int => 42, a => C1.new(attr => "value1"));
    is-deeply .get(C3), C3.new(a => C1.new(attr => "value1"));
@@ -61,6 +81,14 @@ given Deps.new {
 		   a => C1.new(attr => "value1")
 	   )
    );
+
+   # .register: C1.new(attr => "value2"), :name<some-name>;
+   # is-deeply .get(C1, :name<some-name>), C1.new: :attr<value2>;
+   # is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
+   #
+   # .register: C1.new(attr => "value3"), :name<some-name>;
+   # is-deeply .get(C1, :name<some-name>), C1.new: :attr<value3>;
+   # is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
 }
 
 my Deps $deps .= new;
@@ -78,7 +106,7 @@ is-deeply $deps.get(Cool),          "42 - 13"                                   
 
 class UserIdStorage { has Int $.user-id }
 
-sub do-background-stuff(UserIdStorage $storage? is copy) is injected {
+sub do-background-stuff(UserIdStorage $storage is copy) is injected {
    start { $storage.user-id * 2 }
 }
 
@@ -94,6 +122,176 @@ deps {
    injectable 42, :name<user-id>;
 
    is-deeply instantiate(Example, :str<bla>), Example.new(user-id => 42, int => 13, str => "bla");
+}
+
+my Deps $d .= new;
+
+$d.register: -> Int $a, Int $b --> Str { "$a - $b - {rand}" }, :name<value>, :lifecycle<New>;
+$d.register: 13;
+$d.register: 42, :name<a>;
+
+ok $d.get(Str) ne $d.get(Str);
+
+class B { has Int $.value is rw }
+
+my Deps $d1 .= new;
+$d1.register: B, :lifecycle<store>;
+my $a1 = $d1.get: B;
+is-deeply $a1, B.new;
+$a1.value = 1;
+is-deeply $a1, B.new: :1value;
+my $d2 = $d1.push-layer;
+my $b1 = $d2.get: B;
+is-deeply $b1, B.new: :1value;
+$b1.value = 2;
+is-deeply $a1, B.new: :2value;
+is-deeply $b1, B.new: :2value;
+
+my Deps $d3 .= new;
+$d3.register: B, :lifecycle<scope>;
+my $a2 = $d3.get: B;
+is-deeply $a2, B.new;
+$a2.value = 1;
+is-deeply $a2, B.new: :1value;
+my $d4 = $d3.push-layer;
+my $b2 = $d4.get: B;
+is-deeply $b2, B.new;
+$b2.value = 2;
+is-deeply $a2, B.new: :1value;
+is-deeply $b2, B.new: :2value;
+
+deps-root :deps<root>, {
+	injectable 1;
+	deps-scope :deps<child>, {
+		injectable 2;
+		deps-scope :deps<grandchild>, {
+			injectable 3;
+
+			injected :deps<root>,       my Int $root-value;
+			injected :deps<child>,      my Int $child-value;
+			injected :deps<grandchild>, my Int $gchild-value;
+
+			is $root-value,   1;
+			is $child-value,  2;
+			is $gchild-value, 3;
+		}
+	}
+}
+
+deps-root :deps<root1>, {
+        injectable 1;
+        deps-root :deps<root2>, {
+                injectable 2;
+                deps-root :deps<root3>, {
+                        injectable 3;
+
+                        injected :deps<root1>, my Int $value1;
+                        injected :deps<root2>, my Int $value2;
+                        injected :deps<root3>, my Int $value3;
+
+                        is $value1, 1;
+                        is $value2, 2;
+                        is $value3, 3;
+                }
+        }
+}
+
+deps-root :deps(my $root1), {
+        injectable 1;
+        deps-root :deps(my $root2), {
+                injectable 2;
+                deps-root :deps(my $root3), {
+                        injectable 3;
+
+                        injected :deps($root1), my Int $value1;
+                        injected :deps($root2), my Int $value2;
+                        injected :deps($root3), my Int $value3;
+
+                        is $value1, 1;
+                        is $value2, 2;
+                        is $value3, 3;
+                }
+        }
+}
+
+deps {
+	mod1;
+
+	injected my Str $str;
+	injected my Str $str-with-name;
+
+	is $str, "this was added by importing a module";
+	is $str-with-name, "this was added by importing a module and has a name";
+}
+
+deps -> $deps {
+	mod1;
+	mod2 $deps;
+
+	injected my Str $str;
+	injected my Str $str-with-name;
+
+	injected my Int $int;
+	injected my Int $int-with-name;
+
+	is $str, "this was added by importing a module";
+	is $str-with-name, "this was added by importing a module and has a name";
+	is $int, 42;
+	is $int-with-name, 13;
+}
+
+sub bla(Int $int-with-name is injected, Str $str-with-name?) is injected {
+	is $int-with-name, 13;
+	is $str-with-name, Str;
+}
+
+deps -> $deps {
+	mod1;
+	mod2 $deps;
+
+	bla;
+}
+
+deps -> $deps {
+	throws-like { bla }, Exception, message => /'$int-with-name'/;
+}
+
+sub ble(Int :$int-with-name is injected, Str :$str-with-name?) is injected {
+	is $int-with-name, 3;
+	is $str-with-name, Str;
+}
+
+deps -> $deps {
+	mod1;
+	mod2 $deps;
+
+	ble :3int-with-name;
+}
+
+sub bli(Int $int-with-name, Str $str-with-name) is injected {
+	is $int-with-name, 13;
+	is $str-with-name, "this was added by importing a module and has a name";
+}
+
+deps -> $deps {
+	mod1;
+	mod2 $deps;
+
+	bli;
+}
+
+deps -> $deps {
+	injectable 42;
+	injected my Cool $bla;
+
+	is $bla, 42;
+}
+
+deps -> $deps {
+	injectable 13;
+	injected my C $bla;
+
+	is-deeply $bla, C.new: :13attr;
 }
 
 done-testing;

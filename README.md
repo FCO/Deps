@@ -55,7 +55,7 @@ deps {
    injected my C $obj;
    is-deeply $obj, C.new: :13attr;
 
-   say injected my C $class;
+   injected my C $class;
    is-deeply $class, C.new;
 }
 

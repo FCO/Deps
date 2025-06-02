@@ -12,7 +12,13 @@
   "name": "Deps",
   "perl": "6.d",
   "provides": {
-    "Deps": "lib/Deps.rakumod"
+    "Deps": "lib/Deps.rakumod",
+    "Deps::Item": "lib/Deps/Item.rakumod",
+    "Deps::Item::New": "lib/Deps/Item/New.rakumod",
+    "Deps::Item::Scope": "lib/Deps/Item/Scope.rakumod",
+    "Deps::Item::Store": "lib/Deps/Item/Store.rakumod",
+    "Deps::LifeCycle": "lib/Deps/LifeCycle.rakumod",
+    "Deps::Module": "lib/Deps/Module.rakumod"
   },
   "resources": [
   ],
