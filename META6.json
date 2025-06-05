@@ -18,6 +18,7 @@
     "Deps::Item::New": "lib/Deps/Item/New.rakumod",
     "Deps::Item::Scope": "lib/Deps/Item/Scope.rakumod",
     "Deps::Item::Store": "lib/Deps/Item/Store.rakumod",
+    "Deps::ItemType": "lib/Deps/ItemType.rakumod",
     "Deps::LifeCycle": "lib/Deps/LifeCycle.rakumod",
     "Deps::Module": "lib/Deps/Module.rakumod"
   },

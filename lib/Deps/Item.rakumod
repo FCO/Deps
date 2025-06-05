@@ -1,14 +1,16 @@
+use Deps::ItemType;
 unit role Deps::Item;
 
-has Mu:U      $.orig-type;
-has Str()     $.name;
-has Mu        $.value   is rw;
-has Bool      $.created is rw = False;
-has           &.func;
-has           $.scope   is required;
+has Mu:U           $.orig-type;
+has Str()          $.name;
+has Mu             $.value   is rw;
+has Bool           $.created is rw = False;
+has                &.func;
+has                $.scope   is required;
+has Deps::ItemType $.type    = Last;
 
 method gist {
-	"Item[{$.lifecycle}].new:\n\tname => {$!name.raku},\n\tfunc => {&!func.raku}\n\tvalue => {$!value.raku.substr: 0, 50},\n\tcreated => {$!created}"
+	"Item[{$.lifecycle}].new:\n\tname => {$!name.raku},\n\ttype => {$!type.Str}\n\tfunc => {&!func.raku}\n\tvalue => {$!value.raku.substr: 0, 50},\n\tcreated => {$!created}"
 }
 
 submethod TWEAK(Mu :$value, |) { $!created = $value.defined }

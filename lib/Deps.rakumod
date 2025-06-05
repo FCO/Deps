@@ -1,5 +1,6 @@
 use Deps::LifeCycle;
 use Deps::Item;
+use Deps::ItemType;
 use Deps::Item::New;
 use Deps::Item::Store;
 use Deps::Item::Scope;
@@ -25,12 +26,20 @@ class Deps {
 	multi method lifecycle-map(New)   { Deps::Item::New   }
 	multi method lifecycle-map(Scope) { Deps::Item::Scope }
 
-	method new-item(Mu:U :$orig-type, Str() :$name, :&func, Mu :$value, Deps::LifeCycle :$lifecycle) {
+	method new-item(
+		Mu:U :$orig-type,
+		Str() :$name,
+		:&func,
+		Mu :$value,
+		Deps::LifeCycle :$lifecycle,
+		Deps::ItemType :$type,
+	) {
 		$.lifecycle-map($lifecycle).new:
 			:$orig-type,
 			:$value,
 			|(:$name with $name),
 			|(:&func with &func),
+			:$type,
 			:scope(self)
 		;
 	}
@@ -63,6 +72,7 @@ class Deps {
 		&function,
 		Str() :$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
+		Str() :$type where { Deps::ItemType::{$type.lc.tc}:exists } = "Last",
 		Capture :$capture
 	) {
 		my $orig-type = &function.returns;
@@ -74,6 +84,7 @@ class Deps {
 			},
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
+			:type(Deps::ItemType::{$type.lc.tc}),
 		;
 		$.store: $orig-type, $item;
 	}
@@ -81,13 +92,15 @@ class Deps {
 	multi method register(
 		Any:D $value,
 		:$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
-		:$name
+		:$name,
+		Str() :$type where { Deps::ItemType::{$type.lc.tc}:exists } = "Last",
 	) {
 		my Deps::Item $item = $.new-item:
 			:orig-type($value.WHAT),
 			:$value,
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
+			:type(Deps::ItemType::{$type.lc.tc}),
 		;
 		$.store: $value, $item
 	}
@@ -96,6 +109,7 @@ class Deps {
 		Any:U ::Type,
 		:$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
+		Str() :$type where { Deps::ItemType::{$type.lc.tc}:exists } = "Last",
 		Capture :$capture
 	) {
 		my Deps::Item $item = $.new-item:
@@ -106,6 +120,7 @@ class Deps {
 			},
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
+			:type(Deps::ItemType::{$type.lc.tc}),
 		;
 		$.store: Type, $item
 	}
@@ -135,27 +150,35 @@ class Deps {
 
 	method pop-layer { $!parent }
 
-	multi method get(::Type, Str :$maybe-name!, Capture :$capture) {
-		$.get(Type, :name($maybe-name), |(:$capture with $capture))
-		// $.get(Type, |(:$capture with $capture))
+	multi method get(::Type, Str :$maybe-name!, Capture :$capture, Bool :$instantiate = True) {
+		$.get(Type, :name($maybe-name), |(:$capture with $capture), :!instantiate)
+		// $.get(Type, |(:$capture with $capture), :$instantiate)
 	}
 
-	multi method get(::Type, Str :$name!, Capture :$capture) {
-		return .get-value: self, :$capture with %!named-cache{Type.^name}{$name};
-		for |$.factory-to: Type {
-			next unless .has-name: $name;
-			%!named-cache{Type.^name}{$name} = $_;
-			return .get-value: self, :$capture
+	multi method get(::Type, Str :$name, Capture :$capture, Bool :$instantiate = False) {
+		if $name.defined {
+			return .get-value: self, :$capture with %!named-cache{Type.^name}{$name};
+		} else {
+			return .get-value: self, :$capture with %!cache{Type.^name};
 		}
-	}
 
-	multi method get(::Type, Capture :$capture) {
-		return .get-value: self, :$capture with %!cache{Type.^name};
+		my $previous-next;
+
 		for |$.factory-to: Type {
-			%!cache{Type.^name} = $_;
-			return .get-value: self, :$capture
+			if $name.defined {
+				next unless .has-name: $name;
+				%!named-cache{Type.^name}{$name} = $_;
+			} else {
+				%!cache{Type.^name} = $_;
+			}
+			if .type ~~ Next {
+				$previous-next = $_;
+			} else {
+				return .get-value: self, :$capture
+			}
 		}
-		try $.instantiate(Type) // Nil
+		return .get-value: self, :$capture with $previous-next;
+		try $.instantiate(Type) if $instantiate
 	}
 }
 

@@ -82,13 +82,34 @@ given Deps.new {
 	   )
    );
 
-   # .register: C1.new(attr => "value2"), :name<some-name>;
-   # is-deeply .get(C1, :name<some-name>), C1.new: :attr<value2>;
-   # is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
-   #
-   # .register: C1.new(attr => "value3"), :name<some-name>;
-   # is-deeply .get(C1, :name<some-name>), C1.new: :attr<value3>;
-   # is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
+   .register: C1.new(attr => "value2"), :name<some-name>, :type<next>;
+   is-deeply .get(C1, :name<some-name>), C1.new: :attr<value2>;
+   is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
+
+   .register: C1.new(attr => "value3"), :name<some-name>;
+   is-deeply .get(C1, :name<some-name>), C1.new: :attr<value3>;
+   is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
+
+
+   .register: C1.new(attr => "value3"), :name<some-other-name>, :type<next>;
+   is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value3>;
+   is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
+
+   .register: C1.new(attr => "value4"), :name<some-other-name>, :type<next>;
+   is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value4>;
+   is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
+
+   .register: C1.new(attr => "value5"), :name<some-other-name>, :type<next>;
+   is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value5>;
+   is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
+
+   .register: C1.new(attr => "value6"), :name<some-other-name>, :type<last>;
+   is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value6>;
+   is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
+
+   .register: C1.new(attr => "value7"), :name<some-other-name>, :type<last>;
+   is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value6>;
+   is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
 }
 
 my Deps $deps .= new;
@@ -100,7 +121,7 @@ $deps.register: 42, :name<a>;
 
 is-deeply $deps.get(Bla),           Bla.new(value => "42 - 13", a => 42, b => 13);
 is-deeply $deps.get(Int, :name<a>), 42                                           ;
-is-deeply $deps.get(Int, :name<b>), Nil                                          ;
+is-deeply $deps.get(Int, :name<b>), Empty                                        ;
 is-deeply $deps.get(Int),           13                                           ;
 is-deeply $deps.get(Cool),          "42 - 13"                                    ;
 
