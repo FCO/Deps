@@ -13,6 +13,7 @@
   "perl": "6.d",
   "provides": {
     "Deps": "lib/Deps.rakumod",
+    "Deps::Funcs": "lib/Deps/Funcs.rakumod",
     "Deps::Item": "lib/Deps/Item.rakumod",
     "Deps::Item::New": "lib/Deps/Item/New.rakumod",
     "Deps::Item::Scope": "lib/Deps/Item/Scope.rakumod",
