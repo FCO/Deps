@@ -15,11 +15,11 @@ sub get-deps($deps, Any:U :$class) {
 
 multi injected(Mu $var is rw, :$deps, :$class, |c) is export {
 	my $deps-obj = get-deps($deps, :$class);
-	$var = $deps-obj.get($var, |(:$deps with $deps), :name($var.VAR.name.substr: 1)) // $deps-obj.get: $var
+	$var = $deps-obj.get: $var, |(:$deps with $deps), :maybe-name($var.VAR.name.substr: 1)
 }
 multi injected(Mu $var, :$deps, :$class, |c) is export {
 	my $deps-obj = get-deps($deps, :$class);
-	$deps-obj.get($var, :deps($var.VAR.name.substr: 1)) // $deps-obj.get: $var
+	$deps-obj.get: $var, :deps($var.VAR.name.substr: 1)
 }
 sub injectable(:$deps, :$class, |c) is export { get-deps($deps, :$class).register: |c }
 sub instantiate(:$deps, :$class, |c) is export { get-deps($deps, :$class).instantiate: |c }

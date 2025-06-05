@@ -135,6 +135,11 @@ class Deps {
 
 	method pop-layer { $!parent }
 
+	multi method get(::Type, Str :$maybe-name!, Capture :$capture) {
+		$.get(Type, :name($maybe-name), |(:$capture with $capture))
+		// $.get(Type, |(:$capture with $capture))
+	}
+
 	multi method get(::Type, Str :$name!, Capture :$capture) {
 		return .get-value: self, :$capture with %!named-cache{Type.^name}{$name};
 		for |$.factory-to: Type {
@@ -157,9 +162,9 @@ class Deps {
 multi prepare-args(Any:U ::Type, Deps $deps --> Map()) {
 	do for Type.^attributes -> Attribute $attr {
 		my $type = $attr.type;
-		my $name = $attr.name.substr: 2;
-		my $value = $deps.get($type, :$name) // $deps.get: $type;
-		$name => $_ with $value
+		my $maybe-name = $attr.name.substr: 2;
+		my $value = $deps.get: $type, :$maybe-name;
+		$maybe-name => $_ with $value
 	}
 }
 
@@ -173,11 +178,11 @@ multi prepare-args(&func, Deps $deps --> Capture()) {
 		do if $par.named {
 			my @names = $par.named_names;
 			my $name  = @names.tail;
-			my $value = $deps.get($type, :name(@names.any)) // $deps.get: $type;
+			my $value = $deps.get: $type, :maybe-name(@names.any);
 			$name => $_ with $value
 		} else {
-			my $name = $par.name.substr: 1;
-			my $value = $deps.get($type, :$name) // $deps.get: $type;
+			my $maybe-name = $par.name.substr: 1;
+			my $value = $deps.get: $type, :$maybe-name;
 			$_ with $value
 		}
 	}
