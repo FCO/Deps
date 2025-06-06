@@ -82,7 +82,7 @@ given Deps.new {
 	   )
    );
 
-   .register: C1.new(attr => "value2"), :name<some-name>, :type<next>;
+   .register: C1.new(attr => "value2"), :name<some-name>, :priority<defer>;
    is-deeply .get(C1, :name<some-name>), C1.new: :attr<value2>;
    is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
 
@@ -91,25 +91,31 @@ given Deps.new {
    is-deeply .get(C1, :name<some-name>), .get(C1, :name<some-name>);
 
 
-   .register: C1.new(attr => "value3"), :name<some-other-name>, :type<next>;
+   .register: C1.new(attr => "value3"), :name<some-other-name>, :priority<defer>;
    is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value3>;
    is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
 
-   .register: C1.new(attr => "value4"), :name<some-other-name>, :type<next>;
+   .register: C1.new(attr => "value4"), :name<some-other-name>, :priority<defer>;
    is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value4>;
    is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
 
-   .register: C1.new(attr => "value5"), :name<some-other-name>, :type<next>;
+   .register: C1.new(attr => "value5"), :name<some-other-name>, :priority<defer>;
    is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value5>;
    is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
 
-   .register: C1.new(attr => "value6"), :name<some-other-name>, :type<last>;
+   .register: C1.new(attr => "value6"), :name<some-other-name>, :priority<strict>;
    is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value6>;
    is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
 
-   .register: C1.new(attr => "value7"), :name<some-other-name>, :type<last>;
+   .register: C1.new(attr => "value7"), :name<some-other-name>, :priority<strict>;
    is-deeply .get(C1, :name<some-other-name>), C1.new: :attr<value6>;
    is-deeply .get(C1, :name<some-other-name>), .get(C1, :name<some-other-name>);
+
+   throws-like {
+	   .register: C1.new(attr => "value8"), :name<some-other-name>, :priority<unique>;
+   }, Exception, message => /"Deps already has a entry to C1 and name 'some-other-name'"/;
+
+   .register: C1.new(attr => "value8"), :name<some-other-name2>, :priority<unique>;
 }
 
 my Deps $deps .= new;

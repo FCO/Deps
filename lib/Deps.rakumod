@@ -1,6 +1,6 @@
 use Deps::LifeCycle;
 use Deps::Item;
-use Deps::ItemType;
+use Deps::Priority;
 use Deps::Item::New;
 use Deps::Item::Store;
 use Deps::Item::Scope;
@@ -32,14 +32,14 @@ class Deps {
 		:&func,
 		Mu :$value,
 		Deps::LifeCycle :$lifecycle,
-		Deps::ItemType :$type,
+		Deps::Priority :$priority,
 	) {
 		$.lifecycle-map($lifecycle).new:
 			:$orig-type,
 			:$value,
 			|(:$name with $name),
 			|(:&func with &func),
-			:$type,
+			|(:$priority with $priority),
 			:scope(self)
 		;
 	}
@@ -69,10 +69,18 @@ class Deps {
 	}
 
 	multi method register(
+		::Type Any,
+		:$name,
+		Str() :$priority! where { Deps::Priority::{$priority.lc.tc} eq Unique },
+	) {
+		die "Deps already has a entry to {Type.^name}{" and name '$_'" with $name}" if $.get: Type, |(:$name with $name)
+	}
+
+	multi method register(
 		&function,
 		Str() :$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
-		Str() :$type where { Deps::ItemType::{$type.lc.tc}:exists } = "Last",
+		Str() :$priority where { Deps::Priority::{$priority.lc.tc}:exists } = "Strict",
 		Capture :$capture
 	) {
 		my $orig-type = &function.returns;
@@ -84,7 +92,7 @@ class Deps {
 			},
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
-			:type(Deps::ItemType::{$type.lc.tc}),
+			:priority(Deps::Priority::{$priority.lc.tc}),
 		;
 		$.store: $orig-type, $item;
 	}
@@ -93,14 +101,14 @@ class Deps {
 		Any:D $value,
 		:$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
-		Str() :$type where { Deps::ItemType::{$type.lc.tc}:exists } = "Last",
+		Str() :$priority where { Deps::Priority::{$priority.lc.tc}:exists } = "Strict",
 	) {
 		my Deps::Item $item = $.new-item:
 			:orig-type($value.WHAT),
 			:$value,
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
-			:type(Deps::ItemType::{$type.lc.tc}),
+			:priority(Deps::Priority::{$priority.lc.tc}),
 		;
 		$.store: $value, $item
 	}
@@ -109,7 +117,7 @@ class Deps {
 		Any:U ::Type,
 		:$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
-		Str() :$type where { Deps::ItemType::{$type.lc.tc}:exists } = "Last",
+		Str() :$priority where { Deps::Priority::{$priority.lc.tc}:exists } = "Strict",
 		Capture :$capture
 	) {
 		my Deps::Item $item = $.new-item:
@@ -120,7 +128,7 @@ class Deps {
 			},
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
-			:type(Deps::ItemType::{$type.lc.tc}),
+			:priority(Deps::Priority::{$priority.lc.tc}),
 		;
 		$.store: Type, $item
 	}
@@ -171,7 +179,7 @@ class Deps {
 			} else {
 				%!cache{Type.^name} = $_;
 			}
-			if .type ~~ Next {
+			if .priority ~~ Defer {
 				$previous-next = $_;
 			} else {
 				return .get-value: self, :$capture
