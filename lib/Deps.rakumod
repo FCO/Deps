@@ -26,13 +26,14 @@ class Deps {
 	multi method lifecycle-map(New)   { Deps::Item::New   }
 	multi method lifecycle-map(Scope) { Deps::Item::Scope }
 
-	method new-item(
+	multi method new-item(
 		Mu:U :$orig-type,
 		Str() :$name,
 		:&func,
 		Mu :$value,
 		Deps::LifeCycle :$lifecycle,
 		Deps::Priority :$priority,
+		:&only-if,
 	) {
 		$.lifecycle-map($lifecycle).new:
 			:$orig-type,
@@ -40,6 +41,7 @@ class Deps {
 			|(:$name with $name),
 			|(:&func with &func),
 			|(:$priority with $priority),
+			:&only-if,
 			:scope(self)
 		;
 	}
@@ -81,6 +83,7 @@ class Deps {
 		Str() :$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
 		Str() :$priority where { Deps::Priority::{$priority.lc.tc}:exists } = "Strict",
+		:&only-if,
 		Capture :$capture
 	) {
 		my $orig-type = &function.returns;
@@ -93,6 +96,7 @@ class Deps {
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
 			:priority(Deps::Priority::{$priority.lc.tc}),
+			|(:&only-if with &only-if),
 		;
 		$.store: $orig-type, $item;
 	}
@@ -102,6 +106,7 @@ class Deps {
 		:$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
 		Str() :$priority where { Deps::Priority::{$priority.lc.tc}:exists } = "Strict",
+		:&only-if,
 	) {
 		my Deps::Item $item = $.new-item:
 			:orig-type($value.WHAT),
@@ -109,6 +114,7 @@ class Deps {
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
 			:priority(Deps::Priority::{$priority.lc.tc}),
+			|(:&only-if with &only-if),
 		;
 		$.store: $value, $item
 	}
@@ -118,6 +124,7 @@ class Deps {
 		:$lifecycle where { Deps::LifeCycle::{$lifecycle.lc.tc}:exists } = "Store",
 		:$name,
 		Str() :$priority where { Deps::Priority::{$priority.lc.tc}:exists } = "Strict",
+		:&only-if,
 		Capture :$capture
 	) {
 		my Deps::Item $item = $.new-item:
@@ -129,8 +136,14 @@ class Deps {
 			|(:$name with $name),
 			:lifecycle(Deps::LifeCycle::{$lifecycle.lc.tc}),
 			:priority(Deps::Priority::{$priority.lc.tc}),
+			|(:&only-if with &only-if),
 		;
 		$.store: Type, $item
+	}
+
+	multi method register(Bool :$only-if where *.not, |) {}
+	multi method register(Bool :$only-if where *.so, |c) {
+		$.register: |c
 	}
 
 	method chain(Mu ::Type) {
@@ -161,6 +174,7 @@ class Deps {
 	multi method get(::Type, Str :$maybe-name!, Capture :$capture, Bool :$instantiate = True) {
 		$.get(Type, :name($maybe-name), |(:$capture with $capture), :!instantiate)
 		// $.get(Type, |(:$capture with $capture), :$instantiate)
+		// Type
 	}
 
 	multi method get(::Type, Str :$name, Capture :$capture, Bool :$instantiate = False) {
@@ -173,6 +187,7 @@ class Deps {
 		my $previous-next;
 
 		for |$.factory-to: Type {
+			next unless .if;
 			if $name.defined {
 				next unless .has-name: $name;
 				%!named-cache{Type.^name}{$name} = $_;
@@ -186,7 +201,8 @@ class Deps {
 			}
 		}
 		return .get-value: self, :$capture with $previous-next;
-		try $.instantiate(Type) if $instantiate
+		try return $.instantiate(Type) if $instantiate;
+		Type
 	}
 }
 

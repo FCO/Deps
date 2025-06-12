@@ -127,7 +127,7 @@ $deps.register: 42, :name<a>;
 
 is-deeply $deps.get(Bla),           Bla.new(value => "42 - 13", a => 42, b => 13);
 is-deeply $deps.get(Int, :name<a>), 42                                           ;
-is-deeply $deps.get(Int, :name<b>), Empty                                        ;
+is-deeply $deps.get(Int, :name<b>), Int                                          ;
 is-deeply $deps.get(Int),           13                                           ;
 is-deeply $deps.get(Cool),          "42 - 13"                                    ;
 
@@ -319,6 +319,25 @@ deps -> $deps {
 	injected my C $bla;
 
 	is-deeply $bla, C.new: :13attr;
+}
+
+deps {
+	injectable 42, :only-if( 1 == 2 );
+	injected my Int $a;
+
+	injectable 13, :only-if{ 1 == 2 };
+	injected my Int $b;
+
+	injectable 3, :only-if( 1 == 1 ), :priority<defer>;
+	injected my Int $c;
+
+	injectable 24, :only-if{ 1 == 1 };
+	injected my Int $d;
+
+	is $a, Int;
+	is $b, Int;
+	is $c, 3;
+	is $d, 24;
 }
 
 done-testing;

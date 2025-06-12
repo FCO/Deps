@@ -8,12 +8,17 @@ has Bool           $.created is rw = False;
 has                &.func;
 has                $.scope   is required;
 has Deps::Priority $.priority = Strict;
+has                &.only-if = -> | { True };
 
 method gist {
 	"Item[{$.lifecycle}].new:\n\tname => {$!name.raku},\n\tpriority => {$!priority.Str}\n\tfunc => {&!func.raku}\n\tvalue => {$!value.raku.substr: 0, 50},\n\tcreated => {$!created}"
 }
 
 submethod TWEAK(Mu :$value, |) { $!created = $value.defined }
+method if(--> Bool())          {
+	return .(|( self if &!only-if.count )) with &!only-if;
+	True
+}
 method get-value($scope)       { ... }
 
 method has-name(Str() $name?) {
